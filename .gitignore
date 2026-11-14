@@ -1,0 +1,11 @@
+# Variables de entorno con credenciales
+.env
+
+# Datos persistentes de MariaDB (solo se conserva .gitkeep)
+DB/data/*
+!DB/data/.gitkeep
+
+# Archivos temporales Python
+__pycache__/
+*.pyc
+.venv/

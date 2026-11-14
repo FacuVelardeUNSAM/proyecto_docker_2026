@@ -1,0 +1,1 @@
+-- TODO: Crear las tablas de hosts y métricas de monitoreo.
