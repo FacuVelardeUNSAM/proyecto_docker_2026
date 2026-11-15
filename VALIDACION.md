@@ -37,3 +37,5 @@ El Compose utiliza MariaDB **11.4**, por lo que resta comprobar el arranque de e
 - Compose conserva exactamente tres servicios; `DOCKER_PROJECT_NAME` coincide con el nombre generado y con un nombre indicado mediante `-p`.
 
 Las respuestas Docker de estas pruebas son controladas. **No se dispone de un daemon Docker real en este entorno**, por lo que queda pendiente verificar el montaje del socket y comparar la pestaña con `docker compose ps -a` en la VM del usuario.
+
+Las capturas y los archivos de pruebas de Web se retiraron posteriormente para simplificar la entrega del TP. Este documento registra las verificaciones realizadas antes de esa limpieza.

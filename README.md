@@ -16,10 +16,6 @@ El alcance es académico: pocos servidores Ubuntu con Net-SNMP. No implementa SN
 
 ## Vista previa
 
-![Dashboard de Nodo](Web/dashboard-preview.png)
-
-Captura de las pruebas con un agente local, un destino sin respuesta y un host pausado. Esos hosts no vienen precargados en la aplicación.
-
 ## Los tres servicios
 
 ```mermaid
@@ -36,7 +32,7 @@ flowchart TD
 | `python` | Leer hosts, consultar SNMP y guardar muestras | `Python/worker.py`, `requirements.txt`, `Dockerfile` |
 | `web` | Servir la interfaz y la API de administración | `Web/api.py`, `index.html`, `requirements.txt`, `Dockerfile` |
 
-`Web/index.html` contiene HTML, CSS y JavaScript propios. `Web/echarts.min.js` es la distribución oficial de Apache ECharts 6.0.0, con sus archivos de licencia y avisos. Se sirve localmente: **el dashboard no depende de una CDN ni de Internet**. No se necesita Node.js para levantar el proyecto.
+`Web/index.html` contiene HTML, CSS y JavaScript propios. `Web/echarts.min.js` es la distribución oficial de Apache ECharts 6.0.0, con la licencia y los avisos incluidos en el mismo JavaScript. Se sirve localmente: **el dashboard no depende de una CDN ni de Internet**. No se necesita Node.js para levantar el proyecto.
 
 ## Puesta en marcha
 
@@ -143,10 +139,6 @@ SNMPv2c transmite la community sin cifrado. Usar una community de **sólo lectur
 ## Estado de la app: consulta nativa de Docker
 
 La pestaña **Estado de la app** muestra una tarjeta para cada uno de los tres servicios. Se actualiza cada 10 segundos y obtiene la información directamente de la **Docker Engine API**, usando el cliente oficial `docker` para Python.
-
-![Estado de los tres servicios](Web/app-status-preview.png)
-
-Captura de validación con respuestas controladas de la API de Docker; la aplicación desplegada consulta al daemon real.
 
 | Dato | De dónde sale | Qué significa |
 |---|---|---|
@@ -282,14 +274,13 @@ docker compose down
 | `DELETE /api/hosts/{id}` | Eliminar host e historial |
 | `GET /api/hosts/{id}/history` | Últimas 120 muestras, de antiguas a recientes |
 
-Las pruebas están en `Web/test_api.py`, `Web/test_app_status.py` y `Python/test_worker.py`; no se copian a las imágenes.
+Las pruebas del recolector están en `Python/test_worker.py`; no se copian a la imagen.
 
 ```bash
 # En un entorno Python local, instalar las mismas dependencias del proyecto.
 python -m pip install -r Web/requirements.txt -r Python/requirements.txt
 
-# Validación de datos y manejo de errores; integración omitida por defecto.
-python -m unittest discover -s Web -p 'test_*.py' -v
+# Pruebas del recolector; integración omitida por defecto.
 python -m unittest discover -s Python -p 'test_*.py' -v
 ```
 
