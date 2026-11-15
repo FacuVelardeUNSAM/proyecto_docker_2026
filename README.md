@@ -221,7 +221,7 @@ Editar un host inicia una nueva versión de configuración: las muestras anterio
 4. **Red:** Compose crea una red bridge predeterminada. Ambos procesos usan el nombre `db` para conectarse por TCP/3306. La red permite al worker consultar los Ubuntu externos.
 5. **Persistencia:** `./DB/data:/var/lib/mysql` es un **bind mount** del directorio local. `init.sql` se monta en modo lectura (`:ro`).
 6. **Arranque:** `depends_on` con `service_healthy` espera al healthcheck de MariaDB. El worker también reintenta si pierde la BD después de iniciar.
-7. **Configuración:** Compose lee `.env` y pasa las variables necesarias a cada servicio. No es necesario reconstruir las imágenes para cambiar esas variables; sí recrear los contenedores con `docker compose up -d`.
+7. **Configuración:** los valores se definen en `.env`; Compose los referencia como `${VARIABLE}` y los pasa a cada servicio. No es necesario reconstruir las imágenes para cambiar esas variables; sí recrear los contenedores con `docker compose up -d`.
 
 ### Secuencia de demostración
 

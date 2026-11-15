@@ -3,10 +3,10 @@ services:
   db:
     image: mariadb:11.4
     environment:
-      MARIADB_DATABASE: ${DB_NAME:-monitor}
-      MARIADB_USER: ${DB_USER:-monitor}
-      MARIADB_PASSWORD: ${DB_PASSWORD:?Completar DB_PASSWORD en .env}
-      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Completar DB_ROOT_PASSWORD en .env}
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
     volumes:
       # Los datos permanecen en el host al eliminar el contenedor.
       - ./DB/data:/var/lib/mysql
@@ -26,11 +26,11 @@ services:
       dockerfile: Dockerfile
     environment:
       DB_HOST: db
-      DB_NAME: ${DB_NAME:-monitor}
-      DB_USER: ${DB_USER:-monitor}
-      DB_PASSWORD: ${DB_PASSWORD:?Completar DB_PASSWORD en .env}
-      POLL_INTERVAL: ${POLL_INTERVAL:-30}
-      RETENTION_DAYS: ${RETENTION_DAYS:-7}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      POLL_INTERVAL: ${POLL_INTERVAL}
+      RETENTION_DAYS: ${RETENTION_DAYS}
     depends_on:
       db:
         condition: service_healthy
@@ -42,17 +42,17 @@ services:
       dockerfile: Dockerfile
     ports:
       # IP del host : puerto del host : puerto del contenedor.
-      - "${WEB_BIND_IP:-127.0.0.1}:${WEB_PORT:-8000}:5000"
+      - "${WEB_BIND_IP}:${WEB_PORT}:5000"
     volumes:
       # Permite consultar la API local de Docker para mostrar los tres contenedores.
       # :ro protege el montaje, pero NO limita los permisos de la API de Docker.
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       DB_HOST: db
-      DB_NAME: ${DB_NAME:-monitor}
-      DB_USER: ${DB_USER:-monitor}
-      DB_PASSWORD: ${DB_PASSWORD:?Completar DB_PASSWORD en .env}
-      POLL_INTERVAL: ${POLL_INTERVAL:-30}
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      POLL_INTERVAL: ${POLL_INTERVAL}
       # Compose completa su nombre real de proyecto (también si se usa -p).
       DOCKER_PROJECT_NAME: ${COMPOSE_PROJECT_NAME}
     depends_on:
