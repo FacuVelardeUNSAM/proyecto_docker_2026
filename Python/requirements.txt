@@ -1,1 +1,3 @@
-# TODO: Incorporar dependencias de SNMP y conexión a la base de datos.
+# Cliente SNMP v2c y conexión con MariaDB.
+pysnmp==7.1.22
+PyMySQL==1.1.2

@@ -1,1 +1,4 @@
-# TODO: Incorporar Flask y el conector de base de datos.
+# API y página web en un único servicio.
+Flask==3.1.2
+# Conector puro Python para MariaDB/MySQL.
+PyMySQL==1.1.2
