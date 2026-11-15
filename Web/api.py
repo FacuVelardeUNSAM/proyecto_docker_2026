@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pymysql
+import docker
+from requests.exceptions import RequestException
 from flask import Flask, jsonify, request, send_file
 from werkzeug.exceptions import HTTPException
 
@@ -66,6 +68,52 @@ def health():
     with connect_db() as db, db.cursor() as cursor:
         cursor.execute('SELECT 1')
     return jsonify(status='ok', poll_interval=POLL_INTERVAL)
+
+
+@app.get('/api/app-status')
+def app_status():
+    """Estado informado por Docker; no depende de que MariaDB esté disponible."""
+    project = os.getenv('DOCKER_PROJECT_NAME', '').strip()
+    if not project:
+        return jsonify(error='Falta DOCKER_PROJECT_NAME. Recreá web con Docker Compose.'), 503
+    client = None
+    try:
+        # Equivale a consultar docker ps -a y docker inspect. No ejecuta comandos.
+        client = docker.DockerClient(base_url='unix:///var/run/docker.sock',
+                                     version='auto', timeout=3)
+        containers = client.containers.list(all=True, filters={'label': [
+            f'com.docker.compose.project={project}',
+            'com.docker.compose.oneoff=False',
+        ]}, ignore_removed=True)
+        services = []
+        for service in ('db', 'python', 'web'):
+            matches = [container for container in containers
+                       if container.labels.get('com.docker.compose.project') == project
+                       and container.labels.get('com.docker.compose.service') == service
+                       and container.labels.get('com.docker.compose.oneoff', '').lower() != 'true']
+            row = dict(service=service, status='missing', health=None, name=None,
+                       image=None, started_at=None, restart_count=None)
+            if len(matches) == 1:
+                container = matches[0]
+                state = container.attrs.get('State', {})
+                started = state.get('StartedAt', '')
+                row.update(status=state.get('Status', 'unknown'), name=container.name,
+                           health=state.get('Health', {}).get('Status'),
+                           image=container.attrs.get('Config', {}).get('Image'),
+                           started_at=started if started and not started.startswith('0001-') else None,
+                           restart_count=container.attrs.get('RestartCount', 0))
+            elif len(matches) > 1:
+                # Esta práctica espera un contenedor por cada uno de sus tres servicios.
+                row['status'] = 'multiple'
+            services.append(row)
+        # Sólo devolver estos campos; nunca exponer Env, mounts ni logs de inspect.
+        return jsonify(services=services, checked_at=datetime.now(timezone.utc).isoformat())
+    except (docker.errors.DockerException, RequestException, OSError) as error:
+        app.logger.warning('No se pudo consultar Docker (%s)', type(error).__name__)
+        return jsonify(error='No se pudo consultar Docker. Revisá que esté iniciado y que web tenga montado /var/run/docker.sock.'), 503
+    finally:
+        if client is not None:
+            client.close()
 
 
 @app.get('/echarts.min.js')

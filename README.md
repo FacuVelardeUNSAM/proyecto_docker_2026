@@ -8,6 +8,7 @@ Monitor **SNMP v2c para servidores Ubuntu**, desarrollado para una presentación
 - Vista ampliada al hacer clic: gráficos **Apache ECharts** de CPU, memoria y tiempo de respuesta, información del sistema e historial de consultas.
 - Alta, modificación, pausa y eliminación de hosts mediante formularios HTML nativos.
 - Configuración de nombre, IPv4, puerto UDP y community de lectura por host.
+- Sección **Estado de la app** con los estados reales de `db`, `python` y `web` consultados a Docker.
 - Recolección real de métricas, sin datos simulados ni hosts precargados.
 - Persistencia en `DB/data/`; historial de siete días y visualización de las últimas 120 muestras de la configuración actual.
 
@@ -139,6 +140,57 @@ snmpwalk -v2c -c mi_community_lab 192.168.1.20 \
 
 SNMPv2c transmite la community sin cifrado. Usar una community de **sólo lectura**, restringida al laboratorio. La aplicación tampoco incorpora autenticación: su publicación predeterminada es local; exponerla sólo en la red de la demostración.
 
+## Estado de la app: consulta nativa de Docker
+
+La pestaña **Estado de la app** muestra una tarjeta para cada uno de los tres servicios. Se actualiza cada 10 segundos y obtiene la información directamente de la **Docker Engine API**, usando el cliente oficial `docker` para Python.
+
+![Estado de los tres servicios](Web/app-status-preview.png)
+
+Captura de validación con respuestas controladas de la API de Docker; la aplicación desplegada consulta al daemon real.
+
+| Dato | De dónde sale | Qué significa |
+|---|---|---|
+| Estado | `State.Status` de Docker | `running`, `exited`, `restarting`, `paused`, etc. |
+| Healthcheck | `State.Health.Status` | `healthy`, `unhealthy` o `starting`, cuando hay una comprobación configurada |
+| Reinicios registrados | `RestartCount` | Contador que informa Docker |
+| Último inicio | `State.StartedAt` | Fecha de inicio registrada por Docker |
+| Nombre e imagen | Información del contenedor | Identifica el contenedor de cada servicio |
+
+En términos de CLI, la vista consulta información equivalente a `docker compose ps -a` y `docker inspect`. **Running no equivale a healthy**: un proceso puede estar ejecutándose y fallar su healthcheck. MariaDB ya tiene healthcheck; Web y Python muestran “Sin healthcheck”. La vista no agrega comprobaciones artificiales para esos dos servicios.
+
+### Cómo se conecta
+
+El servicio `web` monta el socket del Docker Engine de la máquina:
+
+```yaml
+# Socket estándar de Docker Engine en Linux.
+volumes:
+  - /var/run/docker.sock:/var/run/docker.sock:ro
+```
+
+El socket es el punto de comunicación local con Docker. La Web realiza consultas de listado e inspección; la pantalla no agrega botones para detener o reiniciar servicios. Compose pasa automáticamente su nombre de proyecto como `DOCKER_PROJECT_NAME`, y la consulta filtra las etiquetas de ese proyecto y sus servicios `db`, `python` y `web`. No hace falta agregar variables al `.env`.
+
+**Acceso al socket:** `:ro` marca el montaje como de sólo lectura, pero **no convierte la API de Docker en una API de sólo lectura**. Tener acceso al socket otorga permisos amplios sobre Docker y el host. Esta integración está pensada para la VM del laboratorio; conservar el acceso a la Web local o restringido a personas de confianza. Se asume Docker Engine en Linux con el socket estándar; Docker rootless puede usar otra ubicación.
+
+### Actualizar y demostrarlo
+
+```bash
+# Dentro del repositorio: descargar los cambios y reconstruir la Web.
+git pull
+docker compose up -d --build
+
+# Comparar los estados que muestra la pestaña con Docker.
+docker compose ps -a
+
+# En el laboratorio, detener el recolector y observar el cambio de estado.
+docker compose stop python
+
+# Volver a iniciarlo y comprobar que pasa a running.
+docker compose start python
+```
+
+Esta consulta **no depende de MariaDB**: si se detiene `db`, la Web puede seguir mostrando su estado mediante Docker. Si se detiene `web`, una pestaña ya abierta pierde la conexión y muestra “Estado no disponible”; una pestaña nueva no podrá abrir la aplicación. En ese caso, usar `docker compose ps -a` desde la terminal. Si falla el socket, no se informa que los contenedores están detenidos: su estado pasa a “Sin datos”.
+
 ## Métricas recolectadas
 
 | Métrica | Origen | Interpretación |
@@ -223,13 +275,14 @@ docker compose down
 | Método y ruta | Acción |
 |---|---|
 | `GET /api/health` | Comprobar Web y MariaDB; no certifica el estado del worker |
+| `GET /api/app-status` | Consultar directamente a Docker el estado de los tres servicios, sin usar la BD |
 | `GET /api/hosts` | Hosts con su última muestra, sin communities |
 | `POST /api/hosts` | Crear un host |
 | `PUT /api/hosts/{id}` | Actualizar; community vacía conserva la actual |
 | `DELETE /api/hosts/{id}` | Eliminar host e historial |
 | `GET /api/hosts/{id}/history` | Últimas 120 muestras, de antiguas a recientes |
 
-Las pruebas están en `Web/test_api.py` y `Python/test_worker.py`; no se copian a las imágenes.
+Las pruebas están en `Web/test_api.py`, `Web/test_app_status.py` y `Python/test_worker.py`; no se copian a las imágenes.
 
 ```bash
 # En un entorno Python local, instalar las mismas dependencias del proyecto.
@@ -249,6 +302,8 @@ Las pruebas de integración usan `RUN_DB_TESTS=1`, `DB_HOST`, `DB_PORT`, `DB_NAM
 - [PySNMP 7.1: API asíncrona](https://docs.lextudio.com/pysnmp/v7.1/docs/hlapi/v3arch/asyncio/manager/cmdgen/getcmd)
 - [Net-SNMP: HOST-RESOURCES-MIB](https://www.net-snmp.org/docs/mibs/host.html)
 - [Net-SNMP: UCD-SNMP-MIB](https://www.net-snmp.org/docs/mibs/ucdavis.html)
+- [Docker SDK: consulta de contenedores](https://docker-py.readthedocs.io/en/stable/containers.html)
+- [Docker: seguridad del acceso al daemon](https://docs.docker.com/engine/security/)
 - [Apache ECharts](https://echarts.apache.org/handbook/en/get-started/)
 - [Guía de movimiento indicada para la interfaz](https://uxdesign.cc/the-ultimate-guide-to-proper-use-of-animation-in-ux-10bd98614fa9)
 

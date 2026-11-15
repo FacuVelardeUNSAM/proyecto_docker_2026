@@ -1139,6 +1139,90 @@
           transition-duration: 0.01ms !important;
         }
       }
+      /* Navegación visible también en móvil y estado nativo de Docker. */
+      .page-tabs {
+        display: flex;
+        gap: 8px;
+        margin: -12px 0 28px;
+      }
+      .page-tabs a {
+        padding: 9px 14px;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        color: var(--muted);
+        font-size: 12px;
+        transition:
+          background 160ms,
+          color 160ms;
+      }
+      .page-tabs a:hover {
+        background: var(--panel-hover);
+        color: var(--text);
+      }
+      .page-tabs a[aria-current="page"] {
+        background: #292d48;
+        border-color: #454b72;
+        color: #c6bfff;
+      }
+      .app-summary {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 21px 24px;
+        margin-bottom: 22px;
+      }
+      .app-summary .dot {
+        width: 10px;
+        height: 10px;
+        flex: none;
+      }
+      .app-summary h2 {
+        font-size: 16px;
+        font-weight: 550;
+      }
+      .service-title {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 8px;
+      }
+      .service-title h2 {
+        font-size: 18px;
+        font-weight: 550;
+      }
+      .service-name {
+        font-size: 11px;
+        color: var(--muted);
+        margin-bottom: 17px;
+      }
+      .service-card .info-row {
+        align-items: center;
+      }
+      .service-card code {
+        font-size: 11px;
+        color: #c3b9ff;
+      }
+      .service-meta {
+        font-size: 10px;
+        color: var(--muted);
+        margin-top: 14px;
+        overflow-wrap: anywhere;
+      }
+      .service-meta b {
+        color: #d0d7e6;
+        font-weight: 450;
+      }
+      .app-explanation {
+        margin-top: 23px;
+        font-size: 12px;
+        color: var(--muted);
+        line-height: 1.9;
+      }
+      .app-explanation strong {
+        color: var(--text);
+        font-weight: 500;
+      }
     </style>
     <!-- Copia local de Apache ECharts 6.0.0: no requiere Internet durante la presentación. -->
     <script src="/echarts.min.js"></script>
@@ -1180,6 +1264,10 @@
           ><span class="avatar" title="Proyecto Docker 2026">26</span>
         </div>
       </header>
+      <nav class="page-tabs" aria-label="Secciones de la aplicación">
+        <a href="#" id="hostsTab" aria-current="page">Servidores</a>
+        <a href="#app" id="appTab">Estado de la app</a>
+      </nav>
       <div id="errorBanner" class="error-banner" role="alert" hidden></div>
       <main>
         <section id="dashboard" class="view" aria-label="Dashboard de hosts">
@@ -1415,9 +1503,56 @@
             </p>
           </section>
         </section>
+        <section
+          id="appStatus"
+          class="view"
+          aria-labelledby="appStatusTitle"
+          hidden
+        >
+          <div class="heading">
+            <div>
+              <p class="eyebrow">DOCKER ENGINE</p>
+              <h1 id="appStatusTitle" tabindex="-1">Estado de la app</h1>
+              <p class="subtitle">
+                Los tres contenedores de Nodo, consultados directamente a
+                Docker.
+              </p>
+            </div>
+            <button class="button quiet" id="refreshApp">↻ Actualizar</button>
+          </div>
+          <div class="panel app-summary" role="status">
+            <i
+              class="dot"
+              id="appSummaryDot"
+              style="background: var(--muted)"
+            ></i>
+            <div>
+              <h2 id="appSummary">Consultando Docker…</h2>
+              <p class="subtitle" id="appSummaryNote">
+                Esperando el estado de los contenedores.
+              </p>
+            </div>
+          </div>
+          <div class="card-grid" id="serviceCards"></div>
+          <div class="app-explanation">
+            <p>
+              <strong>Estado</strong> indica si el contenedor está en ejecución,
+              detenido o reiniciándose. <strong>Healthcheck</strong> muestra el
+              resultado de la comprobación configurada en Docker; MariaDB ya
+              tiene una.
+            </p>
+            <p>
+              Estar en ejecución no garantiza que todas las funciones del
+              servicio estén disponibles. Si se detiene <strong>web</strong>,
+              esta vista deja de poder actualizarse; podés comprobarlo con
+              <code>docker compose ps -a</code>.
+            </p>
+          </div>
+        </section>
       </main>
       <footer class="footer">
-        <span>SNMP v2c · Ubuntu · Métricas reales del agente</span
+        <span id="footerSource"
+          >SNMP v2c · Ubuntu · Métricas reales del agente</span
         ><span id="updated">Esperando primera actualización</span>
       </footer>
     </div>
@@ -1521,11 +1656,13 @@
       let hosts = [],
         editingId = null,
         loading = false,
+        appLoading = false,
         loaded = false,
         navigation = 0,
         detailRequest = 0,
         detailHostId = null,
         toastTimer;
+      const isAppView = () => location.hash === "#app";
       const selectedId = () =>
         Number(location.hash.match(/^#host\/(\d+)$/)?.[1]) || null;
       const esc = (value) =>
@@ -1747,7 +1884,114 @@
             );
         });
       }
+      // Estado de los contenedores: esta consulta funciona aunque MariaDB esté detenida.
+      const serviceInfo = {
+        db: { title: "MariaDB", description: "Base de datos · db" },
+        python: { title: "Python", description: "Recolector SNMP · python" },
+        web: { title: "Web", description: "Interfaz y API · web" },
+      };
+      const dockerStates = {
+        running: ["En ejecución", "up"],
+        exited: ["Detenido", "down"],
+        restarting: ["Reiniciándose", "stale"],
+        paused: ["Pausado", "stale"],
+        created: ["Creado", "pending"],
+        dead: ["Error", "down"],
+        removing: ["Eliminándose", "stale"],
+        missing: ["No encontrado", "down"],
+        multiple: ["Más de uno", "stale"],
+        unknown: ["Sin datos", "pending"],
+      };
+      const dockerHealth = {
+        healthy: "Correcto (healthy)",
+        unhealthy: "Con fallas (unhealthy)",
+        starting: "Iniciando (starting)",
+      };
+      function renderAppStatus(data = null) {
+        const services =
+          data?.services ||
+          Object.keys(serviceInfo).map((service) => ({
+            service,
+            status: "unknown",
+          }));
+        $("serviceCards").innerHTML = services
+          .map((item) => {
+            const info = serviceInfo[item.service],
+              state = dockerStates[item.status] || dockerStates.unknown;
+            const present = !["unknown", "missing", "multiple"].includes(
+              item.status,
+            );
+            const health = item.health
+              ? (dockerHealth[item.health] || "Desconocido") +
+                (item.status !== "running" ? " · último resultado" : "")
+              : present
+                ? "Sin healthcheck"
+                : "—";
+            return `<article class="panel service-card" data-service="${esc(item.service)}">
+            <div class="service-title"><h2>${info.title}</h2><span class="badge ${state[1]}">${state[0]}</span></div>
+            <p class="service-name">${info.description}</p>
+            <div class="info-row"><span>Estado Docker</span><code data-field="state">${esc(item.status)}</code></div>
+            <div class="info-row"><span>Healthcheck</span><b data-field="health" class="${item.health === "unhealthy" ? "pink" : ""}">${esc(health)}</b></div>
+            <div class="info-row"><span>Reinicios registrados</span><b>${item.restart_count ?? "—"}</b></div>
+            <div class="info-row"><span>Último inicio</span><b>${item.started_at ? esc(date(item.started_at)) : "—"}</b></div>
+            <p class="service-meta">Contenedor<br><b>${esc(item.name || "—")}</b></p>
+            <p class="service-meta">Imagen<br><b>${esc(item.image || "—")}</b></p>
+            ${item.status === "multiple" ? '<p class="chart-help">Esta vista espera un contenedor por servicio.</p>' : ""}
+          </article>`;
+          })
+          .join("");
+        const running = services.filter(
+          (item) => item.status === "running",
+        ).length;
+        const unhealthy = services.filter(
+          (item) => item.status === "running" && item.health === "unhealthy",
+        ).length;
+        const starting = services.some((item) => item.health === "starting");
+        $("appSummary").textContent = data
+          ? `${running} de 3 contenedores en ejecución`
+          : "Estado no disponible";
+        $("appSummaryDot").style.background = !data
+          ? "var(--muted)"
+          : running === 3 && !unhealthy && !starting
+            ? "var(--green)"
+            : "var(--orange)";
+        $("appSummaryNote").textContent = !data
+          ? "No hay una lectura vigente de Docker."
+          : unhealthy
+            ? `${unhealthy} healthcheck con fallas. Revisá las tarjetas.`
+            : starting
+              ? "Docker está comprobando la salud de un servicio."
+              : "Estado del contenedor y healthcheck son comprobaciones diferentes.";
+      }
+      async function refreshAppStatus() {
+        if (appLoading) return;
+        appLoading = true;
+        $("refreshApp").disabled = true;
+        try {
+          const data = await api("/api/app-status");
+          if (!isAppView()) return;
+          renderAppStatus(data);
+          $("errorBanner").hidden = true;
+          $("connectionText").textContent = "Docker conectado";
+          $("connectionDot").style.background = "var(--green)";
+          $("updated").textContent =
+            `Consulta Docker ${clock(data.checked_at)} · refresco cada 10 s`;
+        } catch (error) {
+          if (!isAppView()) return;
+          // Al perder la API, no conservar indicadores verdes como si fueran actuales.
+          renderAppStatus();
+          $("errorBanner").textContent = error.message;
+          $("errorBanner").hidden = false;
+          $("connectionText").textContent = "Docker sin verificar";
+          $("connectionDot").style.background = "var(--orange)";
+          $("updated").textContent = "Sin lectura actual de Docker";
+        } finally {
+          appLoading = false;
+          $("refreshApp").disabled = false;
+        }
+      }
       async function refresh() {
+        if (isAppView()) return refreshAppStatus();
         if (loading) return;
         loading = true;
         $("refresh").disabled = true;
@@ -1755,6 +1999,7 @@
           const data = await api("/api/hosts");
           hosts = data.hosts;
           loaded = true;
+          if (isAppView()) return;
           $("connectionText").textContent = "API conectada";
           $("connectionDot").style.background = "var(--green)";
           $("errorBanner").hidden = true;
@@ -1763,6 +2008,7 @@
           if (!$("dashboard").hidden) renderDashboard();
           if (!$("detail").hidden) await renderDetail();
         } catch (error) {
+          if (isAppView()) return;
           $("connectionText").textContent = "Sin conexión";
           $("connectionDot").style.background = "var(--pink)";
           $("errorBanner").textContent =
@@ -1778,12 +2024,18 @@
           $("refresh").disabled = false;
         }
       }
-      // 3. Navegación con historial del navegador y transiciones cortas, sin rebotes.
+      // Navegación con historial del navegador y transiciones cortas, sin rebotes.
       async function navigate() {
         const turn = ++navigation,
-          detail = !!selectedId();
-        const old = $("dashboard").hidden ? $("detail") : $("dashboard"),
-          target = detail ? $("detail") : $("dashboard");
+          detail = !!selectedId(),
+          appView = isAppView();
+        const views = [$("dashboard"), $("detail"), $("appStatus")];
+        const old = views.find((view) => !view.hidden),
+          target = appView
+            ? $("appStatus")
+            : detail
+              ? $("detail")
+              : $("dashboard");
         if (old !== target && !reducedMotion.matches) {
           old.getAnimations().forEach((animation) => animation.cancel());
           await old
@@ -1797,12 +2049,24 @@
             .finished.catch(() => {});
         }
         if (turn !== navigation) return;
-        $("dashboard").hidden = detail;
-        $("detail").hidden = !detail;
-        if (detail) {
-          await renderDetail();
-        } else if (loaded) {
-          renderDashboard();
+        views.forEach((view) => (view.hidden = view !== target));
+        $("hostsTab").toggleAttribute("aria-current", !appView);
+        $("appTab").toggleAttribute("aria-current", appView);
+        (appView ? $("appTab") : $("hostsTab")).setAttribute(
+          "aria-current",
+          "page",
+        );
+        $("errorBanner").hidden = true;
+        $("connectionText").textContent = "Actualizando…";
+        $("connectionDot").style.background = "var(--muted)";
+        $("footerSource").textContent = appView
+          ? "Docker Engine API · Estado de contenedores"
+          : "SNMP v2c · Ubuntu · Métricas reales del agente";
+        $("updated").textContent = "Consultando estado actual…";
+        if (appView) await refreshAppStatus();
+        else {
+          if (!detail && loaded) renderDashboard();
+          await refresh();
         }
         if (turn !== navigation) return;
         window.scrollTo({
@@ -1821,6 +2085,7 @@
             { duration: 200, easing: "cubic-bezier(.2,0,0,1)" },
           );
         if (detail) $("detailName").focus({ preventScroll: true });
+        if (appView) $("appStatusTitle").focus({ preventScroll: true });
       }
       function lineOptions(samples, series, percent = true) {
         const hasData = samples.some((sample) =>
@@ -2084,6 +2349,7 @@
       $("addHost").onclick = () => openForm();
       $("emptyAdd").onclick = () => openForm();
       $("refresh").onclick = refresh;
+      $("refreshApp").onclick = refreshAppStatus;
       $("search").oninput = renderDashboard;
       $("filter").onchange = renderDashboard;
       window.addEventListener("hashchange", navigate);
@@ -2102,7 +2368,8 @@
           }),
         ),
       );
-      refresh().then(navigate);
+      renderAppStatus();
+      navigate();
       setInterval(() => {
         if (!document.hidden) refresh();
       }, 10000);

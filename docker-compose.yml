@@ -43,12 +43,18 @@ services:
     ports:
       # IP del host : puerto del host : puerto del contenedor.
       - "${WEB_BIND_IP:-127.0.0.1}:${WEB_PORT:-8000}:5000"
+    volumes:
+      # Permite consultar la API local de Docker para mostrar los tres contenedores.
+      # :ro protege el montaje, pero NO limita los permisos de la API de Docker.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       DB_HOST: db
       DB_NAME: ${DB_NAME:-monitor}
       DB_USER: ${DB_USER:-monitor}
       DB_PASSWORD: ${DB_PASSWORD:?Completar DB_PASSWORD en .env}
       POLL_INTERVAL: ${POLL_INTERVAL:-30}
+      # Compose completa su nombre real de proyecto (también si se usa -p).
+      DOCKER_PROJECT_NAME: ${COMPOSE_PROJECT_NAME}
     depends_on:
       db:
         condition: service_healthy

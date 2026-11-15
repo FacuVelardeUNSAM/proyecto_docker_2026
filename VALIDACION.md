@@ -27,3 +27,13 @@ En este agente, CPU comenzó a estar disponible cerca de un minuto después de a
 El entorno de trabajo no dispone de un daemon Docker. **No se ejecutó `docker compose up --build` ni se construyeron las imágenes aquí.** Se comprobó la configuración de Compose y se ejecutaron directamente sus componentes.
 
 El Compose utiliza MariaDB **11.4**, por lo que resta comprobar el arranque de esas imágenes, el healthcheck, la persistencia del bind mount y la conectividad hacia el Ubuntu real en la VM de la presentación. Los pasos están en el README.
+
+## Incorporación de la vista Estado de la app
+
+- 9 pruebas nuevas para la API: filtros de proyecto/servicio, contenedores detenidos, healthchecks, contenedores faltantes, duplicados, ausencia de socket/configuración, timeouts y ocultación de credenciales/logs.
+- Se verificó que `/api/app-status` no consulta MariaDB y sólo permite GET.
+- Se probó el SDK Docker 7.1.0 contra un servidor HTTP de prueba que reproduce `/version`, `/containers/json` y `/containers/{id}/json`; se comprobaron la negociación de versión y los filtros enviados.
+- Pruebas de navegador: estados running/exited/restarting/unhealthy, pérdida de conexión sin conservar estados verdes, navegación entre las tres vistas, funcionamiento con la API de hosts caída y diseño móvil.
+- Compose conserva exactamente tres servicios; `DOCKER_PROJECT_NAME` coincide con el nombre generado y con un nombre indicado mediante `-p`.
+
+Las respuestas Docker de estas pruebas son controladas. **No se dispone de un daemon Docker real en este entorno**, por lo que queda pendiente verificar el montaje del socket y comparar la pestaña con `docker compose ps -a` en la VM del usuario.
