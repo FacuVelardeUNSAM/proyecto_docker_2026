@@ -1,11 +1,12 @@
-# Imagen base con Python; no necesitamos compiladores adicionales.
+# Imagen base con Python.
 FROM python:3.12-slim
+# Carpeta de trabajo dentro del contenedor.
 WORKDIR /app
-# Instalar dependencias antes del código permite reutilizar la caché.
+# Primero las dependencias, después el código.
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY worker.py .
-# Envía los logs inmediatamente a docker compose logs.
+# Muestra los print y logs al instante en docker compose logs.
 ENV PYTHONUNBUFFERED=1
-# El worker realiza consultas salientes; no necesita publicar puertos.
+# Comando que inicia el contenedor.
 CMD ["python", "worker.py"]

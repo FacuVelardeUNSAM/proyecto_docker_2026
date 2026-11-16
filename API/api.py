@@ -1,13 +1,13 @@
-"""Web + API: administra hosts y lee métricas. Las consultas SNMP las hace el worker."""
+"""API: administra hosts y lee métricas. Nginx (web) sirve la página y reenvía /api/ a este servicio.
+Las consultas SNMP las hace el worker."""
 import ipaddress
 import os
 from datetime import datetime, timezone
-from pathlib import Path
 
 import pymysql
 import docker
 from requests.exceptions import RequestException
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, jsonify, request
 from werkzeug.exceptions import HTTPException
 
 app = Flask(__name__)
@@ -58,11 +58,6 @@ def response_headers(response):
     return response
 
 
-@app.get('/')
-def index():
-    return send_file(Path(__file__).with_name('index.html'))
-
-
 @app.get('/api/health')
 def health():
     with connect_db() as db, db.cursor() as cursor:
@@ -75,7 +70,7 @@ def app_status():
     """Estado informado por Docker; no depende de que MariaDB esté disponible."""
     project = os.getenv('DOCKER_PROJECT_NAME', '').strip()
     if not project:
-        return jsonify(error='Falta DOCKER_PROJECT_NAME. Recreá web con Docker Compose.'), 503
+        return jsonify(error='Falta DOCKER_PROJECT_NAME. Recreá api con Docker Compose.'), 503
     client = None
     try:
         # Equivale a consultar docker ps -a y docker inspect. No ejecuta comandos.
@@ -86,7 +81,7 @@ def app_status():
             'com.docker.compose.oneoff=False',
         ]}, ignore_removed=True)
         services = []
-        for service in ('db', 'python', 'web'):
+        for service in ('db', 'python', 'api', 'web'):
             matches = [container for container in containers
                        if container.labels.get('com.docker.compose.project') == project
                        and container.labels.get('com.docker.compose.service') == service
@@ -103,22 +98,17 @@ def app_status():
                            started_at=started if started and not started.startswith('0001-') else None,
                            restart_count=container.attrs.get('RestartCount', 0))
             elif len(matches) > 1:
-                # Esta práctica espera un contenedor por cada uno de sus tres servicios.
+                # Esta práctica espera un contenedor por cada uno de sus servicios.
                 row['status'] = 'multiple'
             services.append(row)
         # Sólo devolver estos campos; nunca exponer Env, mounts ni logs de inspect.
         return jsonify(services=services, checked_at=datetime.now(timezone.utc).isoformat())
     except (docker.errors.DockerException, RequestException, OSError) as error:
         app.logger.warning('No se pudo consultar Docker (%s)', type(error).__name__)
-        return jsonify(error='No se pudo consultar Docker. Revisá que esté iniciado y que web tenga montado /var/run/docker.sock.'), 503
+        return jsonify(error='No se pudo consultar Docker. Revisá que esté iniciado y que api tenga montado /var/run/docker.sock.'), 503
     finally:
         if client is not None:
             client.close()
-
-
-@app.get('/echarts.min.js')
-def echarts():
-    return send_file(Path(__file__).with_name('echarts.min.js'), mimetype='text/javascript')
 
 
 @app.get('/api/hosts')
@@ -224,5 +214,5 @@ def history(host_id):
 
 
 if __name__ == '__main__':
-    # Servidor Flask para la demostración académica, sin debug ni recarga automática.
+    # Servidor de Flask, sin modo debug.
     app.run(host='0.0.0.0', port=5000, debug=False)
